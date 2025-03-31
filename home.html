@@ -31,16 +31,30 @@
 
       if (window["WebSocket"]) {
         conn = new WebSocket("ws://" + document.location.host + "/ws");
+        conn.binaryType = 'arraybuffer';
+
         conn.onclose = function (evt) {
           const item = document.createElement("div");
           item.innerHTML = "<b>Connection closed.</b>";
           appendLog(item);
         };
         conn.onmessage = function (evt) {
-          const messages = evt.data.split('\n');
+          const wsMessage = String.fromCharCode.apply(null, new Uint8Array(evt.data));
+
+          const messages = wsMessage.split('\n');
           for (let i = 0; i < messages.length; i++) {
+            /** @type string */
+            let msg = messages[i]
+
             const item = document.createElement("div");
-            item.innerText = messages[i];
+            if (msg.startsWith("_NOTIFICATION_")) {
+              item.classList.add("notification");
+              msg = msg.split("_NOTIFICATION_")[1];
+            }
+
+            item.innerText = msg;
+
+
             appendLog(item);
           }
         };
@@ -75,6 +89,10 @@
       right: 0.5em;
       bottom: 3em;
       overflow: auto;
+    }
+
+    .notification {
+      color: gray;
     }
 
     #form {

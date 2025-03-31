@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"fmt"
 )
 
 const (
@@ -39,6 +41,7 @@ var upgrader = websocket.Upgrader{
 type Client struct {
 	hub  *Hub
 	conn *websocket.Conn
+  nickname string
 	send chan []byte
 }
 
@@ -59,7 +62,15 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newLine, space, -1))
-		c.hub.broadcast <- message
+
+		if strings.HasPrefix(string(message), "/nick") {
+			log.Println("Changing nickname")
+      c.nickname = strings.TrimSpace(strings.TrimPrefix(string(message), "/nick "))
+			continue
+		}
+
+    messageWithNickNamePrefix := append([]byte("[" + c.nickname + "] "), message...)
+		c.hub.broadcast <- messageWithNickNamePrefix
 	}
 }
 
@@ -79,7 +90,7 @@ func (c *Client) writePump() {
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
+			w, err := c.conn.NextWriter(websocket.BinaryMessage)
 			if err != nil {
 				return
 			}
@@ -110,12 +121,16 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+  nickname := "user" + fmt.Sprint(len(hub.clients) + 1)
+
 	client := &Client{
 		hub:  hub,
 		conn: conn,
+    nickname: nickname,
 		send: make(chan []byte, 256),
 	}
 	client.hub.register <- client
+  client.hub.broadcast <- []byte("_NOTIFICATION_[" + client.nickname + "] joined")
 
 	go client.writePump()
 	go client.readPump()
